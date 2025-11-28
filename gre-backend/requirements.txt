@@ -8,5 +8,7 @@ python-jose
 python-multipart
 passlib[bcrypt]
 dnspython
+email-validator  <-- 新增这一行
+
 
 
