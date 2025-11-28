@@ -24,7 +24,7 @@ import {
 // 2. 如果你部署到了 Vercel，请填入你的 Render 后端地址，例如: "https://gre-backend-xxx.onrender.com"
 // ⚠️ 注意：Vercel (https) 无法连接 http 的后端，必须都是 https！
 
-const API_BASE_URL = "https://你的后端项目名.onrender.com"; 
+const API_BASE_URL = "https://ada-math.onrender.com"; 
 
 // ============================================================================
 
