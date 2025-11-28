@@ -12,13 +12,33 @@ import {
   LayoutDashboard,
   Calculator,
   Video,
-  Loader2 // 加载图标
+  Loader2,
+  AlertTriangle // 新增图标
 } from 'lucide-react';
 
-// ⚠️ 极其重要：请把这里换成你真实的后端地址！
-// 如果是本地测试，用 "http://127.0.0.1:8001"
-// 如果是上线，用 "https://你的后端项目名.onrender.com"
-const API_BASE_URL = "http://127.0.0.1:8001"; 
+// ============================================================================
+// 🛑【核心配置区】请根据你的部署情况修改这里！
+// ============================================================================
+
+// 1. 如果你在本地运行 (npm run dev)，请使用: "http://127.0.0.1:8001"
+// 2. 如果你部署到了 Vercel，请填入你的 Render 后端地址，例如: "https://gre-backend-xxx.onrender.com"
+// ⚠️ 注意：Vercel (https) 无法连接 http 的后端，必须都是 https！
+
+const API_BASE_URL = "https://你的后端项目名.onrender.com"; 
+
+// ============================================================================
+
+// --- 备用演示数据 (当数据库连接失败时显示) ---
+const FALLBACK_QUESTIONS = [
+  {
+    id: "fallback-1",
+    type: "single_choice",
+    content: "【演示数据】如果 x > 0 且 x² - 4x - 12 = 0，那么 x 的值是多少？\n(你看到这道题说明数据库连接失败了)",
+    options: [{id: "A", text: "2"}, {id: "B", text: "6"}, {id: "C", text: "-2"}, {id: "D", text: "0"}],
+    correct_answer: "B",
+    analysis: "这是一个备用题目。请检查 App.jsx 中的 API_BASE_URL 是否配置正确。"
+  }
+];
 
 // --- 模拟数据 (用于 Dashboard 和 VideoClassroom) ---
 
@@ -52,9 +72,10 @@ const SidebarItem = ({ icon: Icon, label, active, onClick }) => (
 );
 
 const GREModule = () => {
-  const [questions, setQuestions] = useState([]); // 存题目的地方
-  const [loading, setLoading] = useState(true);   // 加载状态
-  const [error, setError] = useState(null);       // 报错状态
+  const [questions, setQuestions] = useState([]); 
+  const [loading, setLoading] = useState(true);
+  const [usingFallback, setUsingFallback] = useState(false); // 新增：是否在使用备用数据
+  const [fetchErrorMsg, setFetchErrorMsg] = useState(""); // 新增：具体的错误信息
   
   const [currentQIndex, setCurrentQIndex] = useState(0);
   const [selectedOption, setSelectedOption] = useState(null);
@@ -63,44 +84,52 @@ const GREModule = () => {
   const [isExamFinished, setIsExamFinished] = useState(false);
   const [timeLeft, setTimeLeft] = useState(1200);
 
-  // 1. 新增: 页面加载时，向后端要题目
+  // 1. 获取题目逻辑
   useEffect(() => {
     const fetchQuestions = async () => {
       try {
         setLoading(true);
-        // 发送请求给后端
+        console.log("正在尝试连接:", `${API_BASE_URL}/questions`);
+
         const response = await fetch(`${API_BASE_URL}/questions`);
         
         if (!response.ok) {
-          throw new Error('无法连接到题库服务器');
+          throw new Error(`HTTP 错误: ${response.status}`);
         }
         
         const data = await response.json();
         
-        // 数据校验: 确保拿到的是个数组且不为空
         if (Array.isArray(data) && data.length > 0) {
           setQuestions(data);
+          setUsingFallback(false);
         } else {
-          setError("数据库里暂时没有题目，请先去录入几道题吧！");
+          // 数据库虽然连上了，但是是空的
+          console.warn("数据库为空");
+          setQuestions(FALLBACK_QUESTIONS);
+          setUsingFallback(true);
+          setFetchErrorMsg("数据库连接成功，但没有题目。已显示演示数据。");
         }
       } catch (err) {
-        console.error("Fetch Error:", err);
-        setError("加载题目失败，请检查网络或后端地址。");
+        console.error("连接失败:", err);
+        // 连接失败，使用备用数据，不让页面崩溃
+        setQuestions(FALLBACK_QUESTIONS);
+        setUsingFallback(true);
+        setFetchErrorMsg(`无法连接到后端 (${API_BASE_URL})。可能原因：地址错误、Mixed Content(HTTPS调HTTP)、或后端未启动。`);
       } finally {
         setLoading(false);
       }
     };
 
     fetchQuestions();
-  }, []); // 空数组表示只在刚打开时执行一次
+  }, []); 
 
   // 计时器逻辑
   useEffect(() => {
-    if (timeLeft > 0 && !isExamFinished && !loading && !error) {
+    if (timeLeft > 0 && !isExamFinished && !loading) {
       const timer = setTimeout(() => setTimeLeft(timeLeft - 1), 1000);
       return () => clearTimeout(timer);
     }
-  }, [timeLeft, isExamFinished, loading, error]);
+  }, [timeLeft, isExamFinished, loading]);
 
   const formatTime = (seconds) => {
     const mins = Math.floor(seconds / 60);
@@ -110,7 +139,6 @@ const GREModule = () => {
 
   const handleNext = () => {
     const currentQ = questions[currentQIndex];
-    // 假设后端返回的正确答案是选项ID (如 "B")
     const userChoiceId = currentQ.options[selectedOption]?.id; 
     
     if (userChoiceId === currentQ.correct_answer) {
@@ -126,31 +154,16 @@ const GREModule = () => {
     }
   };
 
-  // --- 渲染加载中状态 ---
   if (loading) {
     return (
       <div className="flex flex-col items-center justify-center h-64 text-slate-500">
         <Loader2 className="animate-spin mb-4 text-blue-600" size={48} />
-        <p>正在从云端题库加载 GRE 难题...</p>
+        <p>正在尝试连接云端题库...</p>
+        <p className="text-xs text-slate-400 mt-2">目标: {API_BASE_URL}</p>
       </div>
     );
   }
 
-  // --- 渲染错误状态 ---
-  if (error) {
-    return (
-      <div className="p-8 bg-red-50 text-red-700 rounded-xl text-center border border-red-200">
-        <XCircle size={48} className="mx-auto mb-4" />
-        <h3 className="text-lg font-bold">出错了</h3>
-        <p>{error}</p>
-        <button onClick={() => window.location.reload()} className="mt-4 text-sm underline">
-          点击刷新重试
-        </button>
-      </div>
-    );
-  }
-
-  // --- 渲染考试结束 ---
   if (isExamFinished) {
     return (
       <div className="bg-white p-8 rounded-xl shadow-sm border border-slate-200 text-center max-w-2xl mx-auto mt-10">
@@ -178,6 +191,20 @@ const GREModule = () => {
 
   return (
     <div className="max-w-4xl mx-auto">
+      {/* ⚠️ 连接状态警告条 */}
+      {usingFallback && (
+        <div className="mb-6 bg-yellow-50 border border-yellow-200 text-yellow-800 p-4 rounded-lg flex items-start space-x-3">
+          <AlertTriangle className="flex-shrink-0 mt-0.5" size={20} />
+          <div>
+            <h4 className="font-bold text-sm">注意：正在显示演示数据</h4>
+            <p className="text-xs mt-1">{fetchErrorMsg}</p>
+            <p className="text-xs mt-1 font-mono bg-yellow-100 inline-block px-1 rounded">
+              请检查代码中的 API_BASE_URL: {API_BASE_URL}
+            </p>
+          </div>
+        </div>
+      )}
+
       {/* Header Bar */}
       <div className="flex justify-between items-center bg-white p-4 rounded-lg shadow-sm mb-6 border border-slate-200">
         <div className="flex items-center space-x-2 text-slate-700">
@@ -201,9 +228,6 @@ const GREModule = () => {
           <div className="flex space-x-2 mb-3">
              <span className="inline-block bg-blue-100 text-blue-700 text-xs font-bold px-2 py-1 rounded">
                {question.type === 'single_choice' ? '单选题' : question.type}
-             </span>
-             <span className="inline-block bg-purple-100 text-purple-700 text-xs font-bold px-2 py-1 rounded">
-               {question.difficulty || 'Medium'}
              </span>
           </div>
           <h3 className="text-xl font-medium text-slate-800 leading-relaxed whitespace-pre-line">
@@ -284,12 +308,11 @@ const VideoClassroom = () => {
     const file = e.target.files[0];
     if (file) {
       setIsUploading(true);
-      // Simulate network request
       setTimeout(() => {
         const newVideo = {
           id: videos.length + 1,
-          title: file.name.replace(/\.[^/.]+$/, ""), // Remove extension
-          duration: "00:15", // Mock duration
+          title: file.name.replace(/\.[^/.]+$/, ""),
+          duration: "00:15",
           category: "User Upload",
           isLocal: true,
           url: URL.createObjectURL(file)
