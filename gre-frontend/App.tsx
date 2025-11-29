@@ -16,17 +16,15 @@ import {
   AlertTriangle,
   ChevronRight,
   List,
-  RotateCcw,
   Plus,
   Minus,
-  Divide,
   X as CloseIcon
 } from 'lucide-react';
 
 // ============================================================================
 // 🛑【核心配置区】
 // ============================================================================
-const API_BASE_URL = "https://ada-math.onrender.com"; 
+const API_BASE_URL = "https://你的后端项目名.onrender.com"; 
 
 // --- 备用演示数据 ---
 const FALLBACK_QUESTIONS = [
